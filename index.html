@@ -3,23 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asteroids Game</title>
+    <meta name="description" content="Ateroids - A classic asteroid shooting game">
+    <title>Ateroids - Single File Edition</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <div id="start-screen" class="screen">
-            <h1>ASTEROIDS</h1>
-            <p>Use Arrow Keys to move, Space to shoot</p>
-            <button id="start-button">START GAME</button>
+        <canvas id="game-canvas" width="800" height="600" aria-label="Ateroids Game Canvas" role="application"></canvas>
+        
+        <div id="start-screen" class="overlay">
+            <h1>ATEROIDS</h1>
+            <h2>Single File Edition</h2>
+            <p>Use arrow keys to move, SPACE to shoot</p>
+            <p>On mobile: Touch controls will appear</p>
+            <p>Press ENTER or tap to start</p>
         </div>
-        <div id="game-over" class="screen hidden">
+        
+        <div id="game-over-screen" class="overlay hidden">
             <h1>GAME OVER</h1>
-            <p>Your Score: <span id="final-score">0</span></p>
-            <button id="restart-button">PLAY AGAIN</button>
+            <h2 id="final-score">Score: 0</h2>
+            <p>Press ENTER or tap to restart</p>
+        </div>
+        
+        <div id="hud">
+            <div id="score">Score: 0</div>
+            <div id="high-score">High Score: 0</div>
+            <div id="lives">Lives: ❤️❤️❤️</div>
+            <div id="bombs">Bombs: 💣</div>
+            <div id="powerups-active">PowerUps: None</div>
+            <div id="version">v4.0 Single File</div>
+        </div>
+        
+        <div id="mobile-controls" class="hidden">
+            <div id="move-touch-area">
+                <div id="left-btn" class="touch-btn">⬅️</div>
+                <div id="right-btn" class="touch-btn">➡️</div>
+                <div id="thrust-btn" class="touch-btn">⬆️</div>
+            </div>
+            <div id="action-touch-area">
+                <div id="shoot-btn" class="touch-btn">🔫</div>
+                <div id="bomb-btn" class="touch-btn">💣</div>
+                <div id="pause-btn" class="touch-btn">⏸️</div>
+            </div>
+        </div>
+        
+        <div id="accessibility-controls">
+            <button id="colorblind-toggle" aria-label="Toggle colorblind mode">Colorblind Mode</button>
         </div>
     </div>
+    
     <script src="game.js"></script>
 </body>
 </html>
