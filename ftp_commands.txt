@@ -1,0 +1,9 @@
+user dom42uk ztjH8cuEtW39
+prompt off
+binary
+mkdir www/ateroids
+cd www/ateroids
+put index.html
+put game.js
+put style.css
+quit

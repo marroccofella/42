@@ -1,13 +1,11 @@
-# Ignore OS files
-.DS_Store
-Thumbs.db
-
-# Ignore log files and temp
-*.log
-tmp/
-
-# Ignore deployment configs (optional)
-windsurf_deployment.yaml
-
-# Ignore node_modules if ever added
+# Ignore node_modules and build artifacts
 node_modules/
+dist/
+build/
+.env
+*.log
+*.tmp
+.DS_Store
+# Ignore deployment and system files
+netlify.toml
+.gitignore

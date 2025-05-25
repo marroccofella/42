@@ -1,0 +1,6 @@
+user dom42uk ztjH8cuEtW39
+prompt off
+binary
+cd www/ateroids
+get game.js game_server.js
+quit

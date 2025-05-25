@@ -1,0 +1,13 @@
+user dom42uk ztjH8cuEtW39
+prompt off
+binary
+cd public_html
+mkdir ateroids
+cd ateroids
+put index.html
+put game.js
+put style.css
+chmod 644 index.html
+chmod 644 game.js
+chmod 644 style.css
+quit

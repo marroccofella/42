@@ -1,0 +1,9 @@
+open 212.85.249.220
+user dom42uk ztjH8cuEtW39
+binary
+cd www/ateroids
+put index.html
+put game.js
+put style.css
+put README.md
+bye

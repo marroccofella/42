@@ -20,8 +20,6 @@ let asteroids = [];
 let score = 0;
 let lives = 3;
 let level = 1;
-let smartBombs = 3;
-let highScore = 0;
 let gameOver = false;
 let keys = {};
 let lastAsteroidTime = 0;
@@ -29,13 +27,6 @@ let gameLoop;
 let isInvincible = false;
 let invincibleTimer = 0;
 const INVINCIBILITY_DURATION = 180; // 3 seconds at 60 FPS
-
-// Audio
-let shootSound, thrustSound, explosionSound, levelUpSound, smartBombSound;
-
-// Visuals
-let stars = [];
-const NUM_STARS = 100;
 
 // DOM elements
 const startScreen = document.getElementById('start-screen');
@@ -45,7 +36,6 @@ const restartButton = document.getElementById('restart-button');
 const finalScoreElement = document.getElementById('final-score');
 const scoreDisplay = document.createElement('div');
 const livesDisplay = document.createElement('div');
-const highScoreDisplay = document.createElement('div');
 
 // Initialize the game
 function init() {
@@ -56,18 +46,11 @@ function init() {
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
     
+    // Add score and lives displays
     scoreDisplay.id = 'score-display';
     livesDisplay.id = 'lives-display';
-    highScoreDisplay.id = 'high-score-display';
     document.getElementById('game-container').appendChild(scoreDisplay);
     document.getElementById('game-container').appendChild(livesDisplay);
-    document.getElementById('game-container').appendChild(highScoreDisplay);
-
-    // Load high score
-    const savedHighScore = localStorage.getItem('asteroidsHighScore');
-    if (savedHighScore) {
-        highScore = parseInt(savedHighScore, 10);
-    }
     
     // Initialize ship
     resetShip();
@@ -83,29 +66,6 @@ function init() {
     
     // Initial render
     updateDisplays();
-    
-    // Load audio
-    shootSound = new Audio('https://cdn.pixabay.com/download/audio/2022/02/23/audio_af43da8a60.mp3?filename=laser-gun-81707.mp3');
-    thrustSound = new Audio('https://cdn.pixabay.com/download/audio/2022/03/15/audio_380ea62fcf.mp3?filename=engine-low-9021.mp3');
-    explosionSound = new Audio('https://cdn.pixabay.com/download/audio/2021/11/24/audio_fe3b495afd.mp3?filename=bomb-28185.mp3');
-    shootSound.volume = 0.4;
-    thrustSound.volume = 0.3;
-    thrustSound.loop = true;
-    explosionSound.volume = 0.5;
-    levelUpSound = new Audio('https://cdn.pixabay.com/download/audio/2022/11/19/audio_2509a1a8fd.mp3?filename=success-fanfare-trumpets-6185.mp3'); // Example level up sound
-    levelUpSound.volume = 0.6;
-    smartBombSound = new Audio('https://cdn.pixabay.com/download/audio/2022/03/10/audio_3bd23d090a.mp3?filename=large-explosion-80002.mp3'); // Example smart bomb sound
-    smartBombSound.volume = 0.7;
-
-    // Create stars
-    for (let i = 0; i < NUM_STARS; i++) {
-        stars.push({
-            x: Math.random() * CANVAS_WIDTH,
-            y: Math.random() * CANVAS_HEIGHT,
-            radius: Math.random() * 1.5,
-            alpha: Math.random() * 0.5 + 0.5 // Varying brightness
-        });
-    }
 }
 
 // Reset ship to center of screen
@@ -132,20 +92,27 @@ function createAsteroids(count) {
             x = Math.random() * CANVAS_WIDTH;
             y = Math.random() * CANVAS_HEIGHT;
         } while (Math.hypot(x - ship.x, y - ship.y) < 150);
+        
         const angle = Math.random() * Math.PI * 2;
-        const radius = ASTEROID_SIZE + Math.random() * 10;
-        const dx = (Math.random() - 0.5) * ASTEROID_SPEED;
-        const dy = (Math.random() - 0.5) * ASTEROID_SPEED;
+        const size = ASTEROID_SIZE + Math.random() * 10;
+        
+        // Create irregular shape
+        const vertices = [];
+        for (let i = 0; i < ASTEROID_VERTICES; i++) {
+            vertices.push(Math.random() * 0.4 + 0.8); // Random value between 0.8 and 1.2
+        }
+        
         // Generate a random color for each asteroid
         const color = `hsl(${Math.floor(Math.random()*360)}, 80%, 60%)`;
         asteroids.push({
             x: x,
             y: y,
-            dx: dx,
-            dy: dy,
-            radius: radius,
+            dx: Math.cos(angle) * ASTEROID_SPEED * (0.5 + Math.random()),
+            dy: Math.sin(angle) * ASTEROID_SPEED * (0.5 + Math.random()),
             rotation: 0,
-            rotationSpeed: (Math.random() - 0.5) * 0.03,
+            rotationSpeed: (Math.random() - 0.5) * 0.02,
+            radius: size,
+            vertices: vertices,
             color: color
         });
     }
@@ -153,29 +120,28 @@ function createAsteroids(count) {
 
 // Split asteroid into smaller ones
 function splitAsteroid(asteroid, index) {
-    const originalRadius = asteroid.radius;
-    const newSize = originalRadius / 2;
-
-    if (newSize < 10) { // If the new size would be too small
-        asteroids.splice(index, 1);
-        return; // Don't create new ones
-    }
-    // Create two smaller asteroids, no vertices property
-    for (let k = 0; k < 2; k++) {
+    const size = asteroid.radius / 2;
+    if (size < 10) return; // Too small to split further
+    
+    // Create two smaller asteroids
+    for (let i = 0; i < 2; i++) {
         const angle = Math.random() * Math.PI * 2;
+        // Generate a random color for each split asteroid
         const color = `hsl(${Math.floor(Math.random()*360)}, 80%, 60%)`;
-        const newAsteroid = {
+        asteroids.push({
             x: asteroid.x,
             y: asteroid.y,
             dx: Math.cos(angle) * ASTEROID_SPEED * 1.5,
             dy: Math.sin(angle) * ASTEROID_SPEED * 1.5,
             rotation: 0,
             rotationSpeed: (Math.random() - 0.5) * 0.03,
-            radius: newSize,
+            radius: size,
+            vertices: asteroid.vertices.map(() => Math.random() * 0.4 + 0.8),
             color: color
-        };
-        asteroids.push(newAsteroid);
+        });
     }
+    
+    // Remove the original asteroid
     asteroids.splice(index, 1);
 }
 
@@ -206,16 +172,11 @@ function update() {
     
     // Apply thrust
     if (keys['ArrowUp']) {
-        const thrustAngle = ship.rotation - Math.PI / 2; // Tip direction
-        ship.dx += Math.cos(thrustAngle) * SHIP_THRUST;
-        ship.dy += Math.sin(thrustAngle) * SHIP_THRUST;
+        ship.dx += Math.cos(ship.rotation) * SHIP_THRUST;
+        ship.dy += Math.sin(ship.rotation) * SHIP_THRUST;
         ship.isThrusting = true;
-        if (thrustSound && thrustSound.paused) {
-            thrustSound.play().catch(error => {});
-        }
     } else {
         ship.isThrusting = false;
-        if (thrustSound && !thrustSound.paused) thrustSound.pause();
     }
     
     // Apply friction
@@ -225,12 +186,6 @@ function update() {
     // Update ship position
     ship.x += ship.dx;
     ship.y += ship.dy;
-
-    // Activate Smart Bomb
-    if (keys['b'] && smartBombs > 0 && !gameOver) {
-        activateSmartBomb();
-        keys['b'] = false; // Prevent continuous activation
-    }
     
     // Wrap around screen edges
     if (ship.x < -ship.radius) ship.x = CANVAS_WIDTH + ship.radius;
@@ -244,7 +199,6 @@ function update() {
         if (now - lastAsteroidTime > 200) { // Rate limit shooting
             shoot();
             lastAsteroidTime = now;
-            keys[' '] = false; // Ensure single shot per press logic
         }
     }
     
@@ -274,10 +228,6 @@ function update() {
                 // Bullet hit asteroid
                 score += Math.floor(100 / (asteroid.radius / 20));
                 updateDisplays();
-                if (explosionSound) { 
-                    explosionSound.currentTime = 0; 
-                    explosionSound.play().catch(error => {});
-                }
                 
                 // Split or remove asteroid
                 splitAsteroid(asteroid, j);
@@ -317,10 +267,6 @@ function update() {
                 
                 if (lives <= 0) {
                     gameOver = true;
-                    if (score > highScore) {
-                        highScore = score;
-                        localStorage.setItem('asteroidsHighScore', highScore.toString());
-                    }
                     gameOverScreen.classList.remove('hidden');
                     finalScoreElement.textContent = score;
                     cancelAnimationFrame(gameLoop);
@@ -340,34 +286,25 @@ function update() {
     // Check for level completion
     if (asteroids.length === 0 && !gameOver) {
         level++;
-        if (levelUpSound) { 
-            levelUpSound.currentTime = 0; 
-            levelUpSound.play().catch(error => {});
-        }
         createAsteroids(level + 2);
     }
 }
 
 // Shoot a bullet
 function shoot() {
-    // Bullet should launch from ship's tip (top of 'A') and travel forward from that tip.
-    const launchAngle = ship.rotation - Math.PI / 2; // Top of 'A'
-    const offset = SHIP_SIZE * 0.6; // distance from center to tip
-
     const bullet = {
-        x: ship.x + Math.cos(launchAngle) * offset,
-        y: ship.y + Math.sin(launchAngle) * offset,
-        dx: Math.cos(launchAngle) * BULLET_SPEED + ship.dx * 0.5,
-        dy: Math.sin(launchAngle) * BULLET_SPEED + ship.dy * 0.5,
+        x: ship.x + Math.cos(ship.rotation) * (SHIP_SIZE / 1.5),
+        y: ship.y + Math.sin(ship.rotation) * (SHIP_SIZE / 1.5),
+        dx: Math.cos(ship.rotation) * BULLET_SPEED,
+        dy: Math.sin(ship.rotation) * BULLET_SPEED,
         lifetime: BULLET_LIFETIME
     };
-
-    bullets.push(bullet);
     
-    if (shootSound) { 
-        shootSound.currentTime = 0; 
-        shootSound.play().catch(error => {});
-    }
+    // Add initial velocity from the ship
+    bullet.dx += ship.dx * 0.5;
+    bullet.dy += ship.dy * 0.5;
+    
+    bullets.push(bullet);
 }
 
 // Draw game objects
@@ -375,22 +312,15 @@ function draw() {
     // Clear canvas
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    // Draw bullets
-    bullets.forEach(bullet => {
-        ctx.fillStyle = 'yellow'; // Brighter bullets
-        ctx.fillRect(bullet.x - 2, bullet.y - 1, 4, 2); // Small rectangle
-    });
-
-    // Draw stars
+    
+    // Draw stars (background)
     ctx.fillStyle = 'white';
-    stars.forEach(star => {
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-        ctx.globalAlpha = star.alpha;
-        ctx.fill();
-        ctx.globalAlpha = 1.0; // Reset alpha
-    });
+    for (let i = 0; i < 100; i++) {
+        const x = Math.random() * CANVAS_WIDTH;
+        const y = Math.random() * CANVAS_HEIGHT;
+        const size = Math.random() * 1.5;
+        ctx.fillRect(x, y, size, size);
+    }
     
     // Draw ship
     ctx.save();
@@ -398,43 +328,44 @@ function draw() {
     ctx.rotate(ship.rotation);
     
     // Draw ship as 'A'
-    ctx.font = `bold ${SHIP_SIZE*1.2}px monospace`;
+    ctx.font = `${SHIP_SIZE}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = isInvincible && Math.floor(Date.now() / 100) % 2 === 0 ? 'red' : 'lime';
+    ctx.fillStyle = isInvincible && Math.floor(Date.now() / 100) % 2 === 0 ? 'red' : 'white';
     ctx.fillText('A', 0, 0);
     
-    // Draw thruster as flashing 'w'
+    // Draw thruster as small 'w'
     if (ship.isThrusting) {
-        const speed = Math.hypot(ship.dx, ship.dy);
-        const flameSize = (SHIP_SIZE / 1.5) * (1 + Math.min(speed / 5, 1));
-        const flameColor = Math.floor(Date.now() / 120) % 2 === 0 ? 'yellow' : 'red';
-        ctx.font = `bold ${flameSize}px monospace`;
+        ctx.font = `${SHIP_SIZE/2}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = flameColor;
-        ctx.fillText('w', 0, SHIP_SIZE / 2);
+        ctx.fillStyle = 'red';
+        ctx.fillText('w', 0, SHIP_SIZE/2);
     }
     
     ctx.restore();
+    
+    // Draw bullets
+    ctx.fillStyle = 'yellow';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    bullets.forEach(bullet => {
+        ctx.fillText('.', bullet.x, bullet.y);
+    });
     
     // Draw asteroids
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 2;
     asteroids.forEach(asteroid => {
-        // Ensure asteroid has required properties
-        if (!asteroid || typeof asteroid.x !== 'number' || typeof asteroid.y !== 'number' || typeof asteroid.radius !== 'number') {
-            return; // Skip this asteroid
-        }
-        
         ctx.save();
         ctx.translate(asteroid.x, asteroid.y);
-        ctx.rotate(asteroid.rotation || 0);
+        ctx.rotate(asteroid.rotation);
         ctx.font = `${Math.max(asteroid.radius*1.5, 16)}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = asteroid.color || 'white';
-        ctx.fillText('@', 0, 0); // Always use '@' for asteroids
+        ctx.fillText('@', 0, 0);
         ctx.restore();
     });
     
@@ -444,46 +375,16 @@ function draw() {
 
 // Update score and lives displays
 function updateDisplays() {
-    if (!scoreDisplay || !highScoreDisplay || !livesDisplay) return;
-    
     scoreDisplay.textContent = `Score: ${score} | Level: ${level}`;
-    highScoreDisplay.textContent = `High Score: ${highScore}`;
-    livesDisplay.textContent = `Lives: ${'💪'.repeat(lives)} | Bombs: ${'💣'.repeat(smartBombs)} - VERSION 3.3.7`;
-}
-
-// Activate Smart Bomb
-function activateSmartBomb() {
-    if (smartBombs <= 0) return;
-
-    smartBombs--;
-    if (smartBombSound) { 
-        smartBombSound.currentTime = 0; 
-        smartBombSound.play().catch(error => {});
-    }
-
-    asteroids.forEach(asteroid => {
-        score += 25; // Grant 25 points per asteroid destroyed by bomb
-        // Optionally, trigger a smaller visual/audio cue for each asteroid here
-        // For now, the main bomb sound covers it.
-    });
-
-    asteroids.length = 0; // Clear all asteroids
-    updateDisplays();
-    // We might want to ensure new asteroids don't spawn immediately if level was cleared this way
-    // For now, if this clears the level, new ones will spawn as per existing logic.
+    livesDisplay.textContent = `Lives: ${'❤'.repeat(lives)}`;
 }
 
 // Game loop
 function gameUpdate() {
     if (!gameOver) {
-        try {
-            update();
-            draw();
-            gameLoop = requestAnimationFrame(gameUpdate);
-        } catch (error) {
-            console.error('[v3.3.7] Game loop error:', error);
-            gameLoop = requestAnimationFrame(gameUpdate);
-        }
+        update();
+        draw();
+        gameLoop = requestAnimationFrame(gameUpdate);
     }
 }
 
@@ -495,7 +396,6 @@ function startGame() {
     score = 0;
     lives = 3;
     level = 1;
-    smartBombs = 3; // Reset smart bombs
     gameOver = false;
     
     // Hide screens
