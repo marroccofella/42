@@ -1,0 +1,13 @@
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore log files and temp
+*.log
+tmp/
+
+# Ignore deployment configs (optional)
+windsurf_deployment.yaml
+
+# Ignore node_modules if ever added
+node_modules/
