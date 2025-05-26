@@ -16,8 +16,6 @@
 }
 
 body {
-    margin: 0;
-    padding: 0;
     min-height: 100vh;
     background: var(--bg-color);
     overflow: hidden;
@@ -156,25 +154,4 @@ button:active {
     #hud > div {
         margin: 3px 0;
     }
-}
-
-/* Animations */
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-}
-
-.pulse {
-    animation: pulse 1s infinite;
-}
-
-/* Particle Effects */
-.particle {
-    position: absolute;
-    pointer-events: none;
-    border-radius: 50%;
-    background: white;
-    transform: translate(-50%, -50%);
-    opacity: 0.8;
 }
