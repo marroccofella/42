@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="game-container">
+    <main id="game-container">
         <canvas id="game-canvas" width="800" height="600" aria-label="Ateroids Game Canvas" role="application"></canvas>
         
         <div id="start-screen" class="overlay">
@@ -34,23 +34,10 @@
             <div id="version">v4.0 Single File</div>
         </div>
         
-        <div id="mobile-controls" class="hidden">
-            <div id="move-touch-area">
-                <div id="left-btn" class="touch-btn">⬅️</div>
-                <div id="right-btn" class="touch-btn">➡️</div>
-                <div id="thrust-btn" class="touch-btn">⬆️</div>
-            </div>
-            <div id="action-touch-area">
-                <div id="shoot-btn" class="touch-btn">🔫</div>
-                <div id="bomb-btn" class="touch-btn">💣</div>
-                <div id="pause-btn" class="touch-btn">⏸️</div>
-            </div>
-        </div>
-        
         <div id="accessibility-controls">
             <button id="colorblind-toggle" aria-label="Toggle colorblind mode">Colorblind Mode</button>
         </div>
-    </div>
+    </main>
     
     <script src="game.js"></script>
 </body>

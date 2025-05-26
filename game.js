@@ -39,21 +39,42 @@ const POWERUP_TYPES = {
 };
 
 const SMART_BOMBS_START = 2;
+const POWERUP_FALL_SPEED = 30;
+const PARTICLE_FADE_RATE = 2;
+const POWERUP_COLLISION_RADIUS = 15;
+
+const SHIP_WING_ANGLE_OFFSET = Math.PI * 0.8; // Angle for ship wings
+const SHIP_THRUSTER_REAR_OFFSET = 0.6;    // Multiplier for thruster rear point
+const SHIP_THRUSTER_FLAME_LENGTH = 1.2;   // Multiplier for thruster flame length
+const SHIP_THRUSTER_FLAME_ANGLE = 0.1;    // Angle for thruster flame points
+const BULLET_SPREAD_ANGLE = Math.PI / 12; // 15 degrees for multi-shot spread
+
+const PARTICLE_SPEED_MULTIPLIER = 5; // Factor for dx/dy calculation from baseRadius
+const PARTICLE_BASE_SPEED_ADDON = 3; // Added to speed calculation
+// const PARTICLE_RADIUS_MULTIPLIER = 10; // Factor for radius calculation from baseRadius - Replaced by more specific constants
+// const PARTICLE_BASE_RADIUS_ADDON = 1; // Added to radius calculation - Replaced by more specific constants
+const PARTICLE_RANDOM_RADIUS_FACTOR_FROM_BASE = 10; // e.g. baseRadius / 10
+const PARTICLE_RANDOM_RADIUS_ADDON = 1;         // e.g. + 1 to the random part
+const PARTICLE_MINIMUM_FIXED_RADIUS = 1;        // e.g. the final + 1
+const PARTICLE_COLOR_VARIANCE = 50; // Max random change to particle color components
+const PARTICLE_COLOR_OFFSET = 25;   // Offset for color variance calculation
+
 
 // Game State Variables
-let canvas, ctx;
 let ship;
 let bullets = [];
 let asteroids = [];
 let particles = [];
 let powerups = [];
 
-let score = 0;
-let lives = 3;
-let level = 1;
-let highScore = localStorage.getItem('asteroidsHighScoreV4') || 0;
-let gameOver = true;
-let isPaused = false;
+let gameState = {
+    score: 0,
+    lives: 3,
+    level: 1,
+    highScore: 0, // Will be loaded from localStorage
+    gameOver: true,
+    isPaused: false
+};
 
 // let keys = {}; // moved to above for clarity
 let lastShotTime = 0;
@@ -66,7 +87,20 @@ let activePowerUps = {
 };
 
 // DOM Elements
-let startScreen, gameOverScreen, scoreDisplay, livesDisplay, highScoreDisplay, finalScoreElement, startButton, restartButton, bombsDisplay, powerupActiveDisplay;
+let domElements = {
+    canvas: null,
+    ctx: null,
+    startScreen: null,
+    gameOverScreen: null,
+    scoreDisplay: null,
+    livesDisplay: null,
+    bombsDisplay: null,
+    powerupActiveDisplay: null,
+    highScoreDisplay: null,
+    finalScoreElement: null,
+    startButton: null,
+    restartButton: null
+};
 
 // Audio
 let sounds = {};
@@ -81,14 +115,14 @@ let shootPressed = false;
 
 // Accessibility & ARIA
 function setAriaLabels() {
-    if (canvas) canvas.setAttribute('aria-label', 'Asteroids Game Canvas');
-    if (startButton) startButton.setAttribute('aria-label', 'Start Game');
-    if (restartButton) restartButton.setAttribute('aria-label', 'Restart Game');
-    if (scoreDisplay) scoreDisplay.setAttribute('aria-label', 'Current Score');
-    if (livesDisplay) livesDisplay.setAttribute('aria-label', 'Lives Remaining');
-    if (bombsDisplay) bombsDisplay.setAttribute('aria-label', 'Smart Bombs');
-    if (powerupActiveDisplay) powerupActiveDisplay.setAttribute('aria-label', 'Active Powerup');
-    if (highScoreDisplay) highScoreDisplay.setAttribute('aria-label', 'High Score');
+    if (domElements.canvas) domElements.canvas.setAttribute('aria-label', 'Asteroids Game Canvas');
+    if (domElements.startButton) domElements.startButton.setAttribute('aria-label', 'Start Game');
+    if (domElements.restartButton) domElements.restartButton.setAttribute('aria-label', 'Restart Game');
+    if (domElements.scoreDisplay) domElements.scoreDisplay.setAttribute('aria-label', 'Current Score');
+    if (domElements.livesDisplay) domElements.livesDisplay.setAttribute('aria-label', 'Lives Remaining');
+    if (domElements.bombsDisplay) domElements.bombsDisplay.setAttribute('aria-label', 'Smart Bombs');
+    if (domElements.powerupActiveDisplay) domElements.powerupActiveDisplay.setAttribute('aria-label', 'Active Powerup');
+    if (domElements.highScoreDisplay) domElements.highScoreDisplay.setAttribute('aria-label', 'High Score');
 }
 
 // Colorblind mode toggle (stub for future expansion)
@@ -145,97 +179,98 @@ function showLeaderboard() {
 
 // Initialization
 window.onerror = function(message, source, lineno, colno, error) {
-    let div = document.createElement('div');
-    div.style.position = 'fixed';
-    div.style.top = '0';
-    div.style.left = '0';
-    div.style.width = '100vw';
-    div.style.background = 'red';
-    div.style.color = 'white';
-    div.style.fontSize = '1.2em';
-    div.style.zIndex = '9999';
-    div.style.padding = '10px 10px';
-    div.style.textAlign = 'center';
-    div.textContent = 'Ateroids v4.0 JS ERROR: ' + message + ' at ' + source + ':' + lineno + ':' + colno;
-    document.body.appendChild(div);
+    createOverlayDiv(
+        'Ateroids v4.0 JS ERROR: ' + message + ' at ' + source + ':' + lineno + ':' + colno,
+        { top: '0', left: '0', width: '100vw' } // background, color etc. use defaults
+    );
     return false;
 };
 
 function debugOverlay(msg) {
-    let div = document.createElement('div');
-    div.style.position = 'fixed';
-    div.style.bottom = '0';
-    div.style.left = '0';
-    div.style.background = 'rgba(0,0,0,0.8)';
-    div.style.color = 'lime';
-    div.style.fontSize = '1em';
-    div.style.zIndex = '9998';
-    div.style.padding = '4px 10px';
-    div.style.margin = '2px';
-    div.style.pointerEvents = 'none';
-    div.textContent = '[DEBUG] ' + msg;
-    document.body.appendChild(div);
+    const div = createOverlayDiv('[DEBUG] ' + msg, {
+        position: 'fixed', // already default but explicit
+        bottom: '0',
+        left: '0',
+        background: 'rgba(0,0,0,0.8)',
+        color: 'lime',
+        fontSize: '1em',
+        zIndex: '9998', // lower z-index for debug
+        padding: '4px 10px',
+        margin: '2px',
+        pointerEvents: 'none',
+        textAlign: 'left' // debug often better left-aligned
+    });
     setTimeout(() => div.remove(), 8000);
+}
+
+// Helper function to get DOM elements and log errors
+function checkElem(id, errorMsgRef) {
+    const elem = document.getElementById(id);
+    if (!elem) {
+        errorMsgRef.value += `Missing element: #${id}\n`; // Use a mutable ref for errorMsg
+        console.error(`Ateroids v4.0 ERROR: Missing element #${id}`);
+    }
+    return elem;
+}
+
+function initializePrimaryDOMElements() {
+    let errorMsg = { value: '' }; // Use an object to pass errorMsg by reference
+
+    domElements.canvas = checkElem('gameCanvas', errorMsg);
+    domElements.ctx = domElements.canvas ? domElements.canvas.getContext('2d') : null;
+    if (domElements.canvas) {
+        domElements.canvas.width = CANVAS_WIDTH;
+        domElements.canvas.height = CANVAS_HEIGHT;
+    }
+    domElements.startScreen = checkElem('start-screen');
+    domElements.gameOverScreen = checkElem('game-over');
+    domElements.scoreDisplay = checkElem('score-display');
+    domElements.livesDisplay = checkElem('lives-display');
+    domElements.bombsDisplay = checkElem('bombs-display');
+    domElements.powerupActiveDisplay = checkElem('powerup-active-display');
+    domElements.highScoreDisplay = checkElem('high-score-display');
+    domElements.finalScoreElement = checkElem('final-score');
+    domElements.startScreen = checkElem('start-screen', errorMsg);
+    domElements.gameOverScreen = checkElem('game-over', errorMsg);
+    domElements.scoreDisplay = checkElem('score-display', errorMsg);
+    domElements.livesDisplay = checkElem('lives-display', errorMsg);
+    domElements.bombsDisplay = checkElem('bombs-display', errorMsg);
+    domElements.powerupActiveDisplay = checkElem('powerup-active-display', errorMsg);
+    domElements.highScoreDisplay = checkElem('high-score-display', errorMsg);
+    domElements.finalScoreElement = checkElem('final-score', errorMsg);
+    domElements.startButton = checkElem('start-button', errorMsg);
+    domElements.restartButton = checkElem('restart-button', errorMsg);
+    
+    gameState.highScore = parseInt(localStorage.getItem('asteroidsHighScoreV4')) || 0;
+
+    if (errorMsg.value) {
+        createOverlayDiv('Ateroids v4.0 ERROR: ' + errorMsg.value, {
+            top: '0', left: '0', width: '100vw', fontSize: '2em', padding: '30px 10px'
+        });
+        return false; // Error occurred
+    }
+    return true; // Success
+}
+
+function setupInitialEventListeners() {
+    document.addEventListener('keydown', keyDownHandler);
+    document.addEventListener('keyup', keyUpHandler);
+    domElements.startButton.addEventListener('click', function(e) {
+        debugOverlay('Start button clicked');
+        startGame();
+    });
+    domElements.restartButton.addEventListener('click', function(e) {
+        debugOverlay('Restart button clicked');
+        startGame();
+    });
 }
 
 debugOverlay('window.onload fired');
 window.onload = () => {
-    let errorMsg = '';
-    function checkElem(id) {
-        const elem = document.getElementById(id);
-        if (!elem) {
-            errorMsg += `Missing element: #${id}\n`;
-            console.error(`Ateroids v4.0 ERROR: Missing element #${id}`);
-        }
-        return elem;
-    }
-    canvas = checkElem('gameCanvas');
-    ctx = canvas ? canvas.getContext('2d') : null;
-    if (canvas) {
-        canvas.width = CANVAS_WIDTH;
-        canvas.height = CANVAS_HEIGHT;
-    }
-    startScreen = checkElem('start-screen');
-    gameOverScreen = checkElem('game-over');
-    scoreDisplay = checkElem('score-display');
-    livesDisplay = checkElem('lives-display');
-    bombsDisplay = checkElem('bombs-display');
-    powerupActiveDisplay = checkElem('powerup-active-display');
-    highScoreDisplay = checkElem('high-score-display');
-    finalScoreElement = checkElem('final-score');
-    startButton = checkElem('start-button');
-    restartButton = checkElem('restart-button');
+    debugOverlay('window.onload fired'); // Keep for sequence debugging
+    if (!initializePrimaryDOMElements()) return; // Stop if essential DOM elements are missing
 
-    debugOverlay('All DOM elements checked');
-    if (errorMsg) {
-        // Show a visible error on the page
-        let div = document.createElement('div');
-        div.style.position = 'fixed';
-        div.style.top = '0';
-        div.style.left = '0';
-        div.style.width = '100vw';
-        div.style.background = 'red';
-        div.style.color = 'white';
-        div.style.fontSize = '2em';
-        div.style.zIndex = '9999';
-        div.style.padding = '30px 10px';
-        div.style.textAlign = 'center';
-        div.textContent = 'Ateroids v4.0 ERROR: ' + errorMsg;
-        document.body.appendChild(div);
-        return;
-    }
-
-    // Event Listeners
-    document.addEventListener('keydown', keyDownHandler);
-    document.addEventListener('keyup', keyUpHandler);
-    startButton.addEventListener('click', function(e) {
-        debugOverlay('Start button clicked');
-        startGame();
-    });
-    restartButton.addEventListener('click', function(e) {
-        debugOverlay('Restart button clicked');
-        startGame();
-    });
+    setupInitialEventListeners();
 
     debugOverlay('Sounds loading...');
     loadSounds();
@@ -246,7 +281,9 @@ window.onload = () => {
     debugOverlay('Showing start screen...');
     showStartScreen();
     debugOverlay('Requesting animation frame for gameLoop...');
-    requestAnimationFrame(gameLoop);
+    // gameState.lastTime should be set here before starting the loop if not set in startGame by default
+    lastTime = performance.now(); 
+    requestAnimationFrame(gameLoop); // Assumes gameLoop is defined
 };
 
 function loadSounds() {
@@ -270,11 +307,11 @@ function playSound(soundName, volume = 0.3) {
 
 // Game Flow
 function startGame() {
-    gameOver = false;
-    isPaused = false;
-    score = 0;
-    lives = 3;
-    level = 1;
+    gameState.gameOver = false;
+    gameState.isPaused = false;
+    gameState.score = 0;
+    gameState.lives = 3;
+    gameState.level = 1;
     smartBombs = SMART_BOMBS_START;
     ship = newShip();
     asteroids = [];
@@ -286,102 +323,62 @@ function startGame() {
     hideScreens();
     updateHUD();
     lastTime = performance.now(); // Reset timer for gameLoop
-    if (!gameLoopRunning) { // Ensure gameLoop isn't started multiple times if already running
-        gameLoopRunning = true;
-        requestAnimationFrame(gameLoop);
-    }
+    requestAnimationFrame(gameLoop);
 }
 
-let gameLoopRunning = false; // To prevent multiple loops from starting
-
 function showStartScreen() {
-    startScreen.classList.remove('hidden');
-    gameOverScreen.classList.add('hidden');
+    domElements.startScreen.classList.remove('hidden');
+    domElements.gameOverScreen.classList.add('hidden');
     updateHUD(); // Update high score on start screen
 }
 
 function showGameOverScreen() {
-    gameOver = true;
-    gameLoopRunning = false; // Stop the loop logic
-    gameOverScreen.classList.remove('hidden');
-    startScreen.classList.add('hidden');
-    finalScoreElement.textContent = score;
-    if (score > highScore) {
-        highScore = score;
-        localStorage.setItem('asteroidsHighScoreV4', highScore);
+    gameState.gameOver = true;
+    // Stop the loop logic by not requesting new frames if gameOver is true (handled in gameLoop)
+    domElements.gameOverScreen.classList.remove('hidden');
+    domElements.startScreen.classList.add('hidden');
+    domElements.finalScoreElement.textContent = gameState.score;
+    if (gameState.score > gameState.highScore) {
+        gameState.highScore = gameState.score;
+        try {
+            localStorage.setItem('asteroidsHighScoreV4', gameState.highScore);
+        } catch (e) {
+            console.warn('Failed to save high score:', e);
+        }
     }
     updateHUD();
 }
 
 function hideScreens() {
-    startScreen.classList.add('hidden');
-    gameOverScreen.classList.add('hidden');
+    domElements.startScreen.classList.add('hidden');
+    domElements.gameOverScreen.classList.add('hidden');
 }
 
 // Game Loop
 function gameLoop(currentTime) {
-    if (!canvas || !ctx) return; // Defensive: abort if canvas/context missing
-    if (gameOver && !startScreen.classList.contains('hidden')) {
+    if (!domElements.canvas || !domElements.ctx) return; // Defensive: abort if canvas/context missing
+    if (gameState.gameOver && !domElements.startScreen.classList.contains('hidden')) {
         // If game is over and start screen is shown, don't run game logic, but keep rendering HUD for high score
         updateHUD();
         requestAnimationFrame(gameLoop);
         return;
     }
-    if (gameOver) {
-        gameLoopRunning = false;
+    if (gameState.gameOver) {
         return; // Stop loop if game over and not on start screen
     }
-    if (!gameLoopRunning && !gameOver) gameLoopRunning = true; // Re-engage if game restarted
+    // No need to re-engage gameLoopRunning, if gameOver is false, it will proceed.
 
     const deltaTime = (currentTime - lastTime) / 1000; // seconds
     lastTime = currentTime;
     gameTime += deltaTime;
 
-    if (!isPaused) {
-        handleInput(deltaTime);
+    if (!gameState.isPaused) {
+        handleInput();
         update(deltaTime, currentTime);
     }
     render();
 
-    if (gameLoopRunning) requestAnimationFrame(gameLoop);
-}
-
-// Input Handling
-function handleInput(dt) {
-    // Reset rotation/thrust
-    ship.rotation = 0;
-    ship.isThrusting = false;
-
-    if (keys['arrowleft'] || keys['a']) {
-        ship.rotation = -SHIP_ROTATION_SPEED;
-    }
-    if (keys['arrowright'] || keys['d']) {
-        ship.rotation = SHIP_ROTATION_SPEED;
-    }
-    if (keys['arrowup'] || keys['w']) {
-        ship.isThrusting = true;
-    }
-    // Shooting (only on keydown, not held)
-    if ((keys[' '] || keys['control']) && !shootPressed) {
-        shootBullet();
-        shootPressed = true;
-    }
-    if (!(keys[' '] || keys['control'])) {
-        shootPressed = false;
-    }
-    // Smart bomb (key: b)
-    if (keys['b']) {
-        activateSmartBomb();
-        keys['b'] = false; // Prevent repeat
-    }
-}
-
-function keyDownHandler(e) {
-    keys[e.key.toLowerCase()] = true;
-}
-
-function keyUpHandler(e) {
-    keys[e.key.toLowerCase()] = false;
+    requestAnimationFrame(gameLoop);
 }
 
 // Update Functions
@@ -410,7 +407,7 @@ function update(dt, currentTime) {
 
     // Powerups
     for (let i = powerups.length - 1; i >= 0; i--) {
-        powerups[i].y += 30 * dt; // Move downwards
+        powerups[i].y += POWERUP_FALL_SPEED * dt; // Move downwards
         if (powerups[i].y > CANVAS_HEIGHT + 20) {
             powerups.splice(i, 1);
         }
@@ -421,7 +418,7 @@ function update(dt, currentTime) {
         let p = particles[i];
         p.x += p.dx * dt;
         p.y += p.dy * dt;
-        p.alpha -= dt * 2; // Fade out
+        p.alpha -= PARTICLE_FADE_RATE * dt; // Fade out
         if (p.alpha <= 0) {
             particles.splice(i, 1);
         }
@@ -444,11 +441,11 @@ function updateActivePowerUpsState(currentTime) {
 // Render Functions
 function render() {
     // Clear canvas
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    domElements.ctx.fillStyle = 'black';
+    domElements.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // Draw stars (simple parallax)
-    drawStars(ctx, gameTime);
+    drawStars(domElements.ctx, gameTime);
 
     // Draw particles
     particles.forEach(p => {
@@ -460,27 +457,27 @@ function render() {
 
     // Draw powerups
     powerups.forEach(p => {
-        ctx.fillStyle = p.details.color;
-        ctx.font = '20px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(p.details.symbol, p.x, p.y);
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
-        ctx.stroke();
+        domElements.ctx.fillStyle = p.details.color;
+        domElements.ctx.font = '20px Arial';
+        domElements.ctx.textAlign = 'center';
+        domElements.ctx.textBaseline = 'middle';
+        domElements.ctx.fillText(p.details.symbol, p.x, p.y);
+        domElements.ctx.strokeStyle = 'white';
+        domElements.ctx.lineWidth = 1;
+        domElements.ctx.beginPath();
+        domElements.ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+        domElements.ctx.stroke();
     });
 
     // Draw asteroids
     asteroids.forEach(drawAsteroid);
 
     // Draw bullets
-    ctx.fillStyle = 'yellow';
+    domElements.ctx.fillStyle = 'yellow';
     bullets.forEach(b => {
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
-        ctx.fill();
+        domElements.ctx.beginPath();
+        domElements.ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
+        domElements.ctx.fill();
     });
 
     // Draw ship
@@ -490,21 +487,21 @@ function render() {
 
     // Draw Shield
     if (activePowerUps.SHIELD.active) {
-        ctx.strokeStyle = 'cyan';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(ship.x, ship.y, ship.radius + 5, 0, Math.PI * 2);
-        ctx.stroke();
+        domElements.ctx.strokeStyle = 'cyan';
+        domElements.ctx.lineWidth = 2;
+        domElements.ctx.beginPath();
+        domElements.ctx.arc(ship.x, ship.y, ship.radius + 5, 0, Math.PI * 2);
+        domElements.ctx.stroke();
     }
 
     // Draw Pause Text if paused
-    if (isPaused) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        ctx.fillStyle = 'white';
-        ctx.font = '40px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('PAUSED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    if (gameState.isPaused) {
+        domElements.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        domElements.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        domElements.ctx.fillStyle = 'white';
+        domElements.ctx.font = '40px Arial';
+        domElements.ctx.textAlign = 'center';
+        domElements.ctx.fillText('PAUSED', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
     }
 }
 
@@ -539,44 +536,44 @@ function newShip() {
 }
 
 function drawShip() {
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = SHIP_SIZE / 15;
-    ctx.beginPath();
+    domElements.ctx.strokeStyle = 'white';
+    domElements.ctx.lineWidth = SHIP_SIZE / 15;
+    domElements.ctx.beginPath();
     // Nose
-    ctx.moveTo(
+    domElements.ctx.moveTo(
         ship.x + ship.radius * Math.cos(ship.angle),
         ship.y + ship.radius * Math.sin(ship.angle)
     );
     // Left wing
     ctx.lineTo(
-        ship.x + ship.radius * Math.cos(ship.angle + Math.PI * 0.8),
-        ship.y + ship.radius * Math.sin(ship.angle + Math.PI * 0.8)
+        ship.x + ship.radius * Math.cos(ship.angle + SHIP_WING_ANGLE_OFFSET),
+        ship.y + ship.radius * Math.sin(ship.angle + SHIP_WING_ANGLE_OFFSET)
     );
     // Right wing
     ctx.lineTo(
-        ship.x + ship.radius * Math.cos(ship.angle - Math.PI * 0.8),
-        ship.y + ship.radius * Math.sin(ship.angle - Math.PI * 0.8)
+        ship.x + ship.radius * Math.cos(ship.angle - SHIP_WING_ANGLE_OFFSET),
+        ship.y + ship.radius * Math.sin(ship.angle - SHIP_WING_ANGLE_OFFSET)
     );
-    ctx.closePath();
-    ctx.stroke();
+    domElements.ctx.closePath();
+    domElements.ctx.stroke();
 
     if (ship.isThrusting) {
-        ctx.fillStyle = 'orange';
-        ctx.beginPath();
-        ctx.moveTo( // Rear center
-            ship.x - ship.radius * 0.6 * Math.cos(ship.angle),
-            ship.y - ship.radius * 0.6 * Math.sin(ship.angle)
+        domElements.ctx.fillStyle = 'orange';
+        domElements.ctx.beginPath();
+        domElements.ctx.moveTo( // Rear center
+            ship.x - ship.radius * SHIP_THRUSTER_REAR_OFFSET * Math.cos(ship.angle),
+            ship.y - ship.radius * SHIP_THRUSTER_REAR_OFFSET * Math.sin(ship.angle)
         );
-        ctx.lineTo( // Flame point 1
-            ship.x - ship.radius * 1.2 * Math.cos(ship.angle + 0.1),
-            ship.y - ship.radius * 1.2 * Math.sin(ship.angle + 0.1)
+        domElements.ctx.lineTo( // Flame point 1
+            ship.x - ship.radius * SHIP_THRUSTER_FLAME_LENGTH * Math.cos(ship.angle + SHIP_THRUSTER_FLAME_ANGLE),
+            ship.y - ship.radius * SHIP_THRUSTER_FLAME_LENGTH * Math.sin(ship.angle + SHIP_THRUSTER_FLAME_ANGLE)
         );
-        ctx.lineTo( // Flame point 2
-            ship.x - ship.radius * 1.2 * Math.cos(ship.angle - 0.1),
-            ship.y - ship.radius * 1.2 * Math.sin(ship.angle - 0.1)
+        domElements.ctx.lineTo( // Flame point 2
+            ship.x - ship.radius * SHIP_THRUSTER_FLAME_LENGTH * Math.cos(ship.angle - SHIP_THRUSTER_FLAME_ANGLE),
+            ship.y - ship.radius * SHIP_THRUSTER_FLAME_LENGTH * Math.sin(ship.angle - SHIP_THRUSTER_FLAME_ANGLE)
         );
-        ctx.closePath();
-        ctx.fill();
+        domElements.ctx.closePath();
+        domElements.ctx.fill();
     }
 }
 
@@ -602,6 +599,33 @@ function moveShip(dt) {
     ship.y += ship.dy;
 }
 
+function createBullet(currentShip, isMultiShotActive) {
+    const baseBullet = {
+        x: currentShip.x + currentShip.radius * Math.cos(currentShip.angle),
+        y: currentShip.y + currentShip.radius * Math.sin(currentShip.angle),
+        dx: BULLET_SPEED * Math.cos(currentShip.angle) + currentShip.dx * 0.5,
+        dy: BULLET_SPEED * Math.sin(currentShip.angle) + currentShip.dy * 0.5,
+        life: BULLET_LIFETIME
+    };
+    
+    let newBullets = [baseBullet];
+
+    if (isMultiShotActive) {
+        const angleOffset = BULLET_SPREAD_ANGLE;
+        newBullets.push({
+            ...baseBullet, // Spread the original calculated x,y,life
+            dx: BULLET_SPEED * Math.cos(currentShip.angle - angleOffset) + currentShip.dx * 0.5,
+            dy: BULLET_SPEED * Math.sin(currentShip.angle - angleOffset) + currentShip.dy * 0.5,
+        });
+        newBullets.push({
+            ...baseBullet, // Spread the original calculated x,y,life
+            dx: BULLET_SPEED * Math.cos(currentShip.angle + angleOffset) + currentShip.dx * 0.5,
+            dy: BULLET_SPEED * Math.sin(currentShip.angle + angleOffset) + currentShip.dy * 0.5,
+        });
+    }
+    return newBullets;
+}
+
 function shootBullet() {
     const currentTime = performance.now();
     let cooldown = BULLET_COOLDOWN;
@@ -610,33 +634,13 @@ function shootBullet() {
     if (currentTime - lastShotTime < cooldown) return;
     lastShotTime = currentTime;
 
-    const baseBullet = {
-        x: ship.x + ship.radius * Math.cos(ship.angle),
-        y: ship.y + ship.radius * Math.sin(ship.angle),
-        dx: BULLET_SPEED * Math.cos(ship.angle) + ship.dx * 0.5, // Add some ship velocity
-        dy: BULLET_SPEED * Math.sin(ship.angle) + ship.dy * 0.5,
-        life: BULLET_LIFETIME
-    };
-    bullets.push(baseBullet);
+    const newShotBullets = createBullet(ship, activePowerUps.MULTI_SHOT.active);
+    bullets.push(...newShotBullets); // Use spread operator to add all new bullets
     playSound('shoot');
-
-    if (activePowerUps.MULTI_SHOT.active) {
-        const angleOffset = Math.PI / 12; // 15 degrees
-        bullets.push({
-            ...baseBullet,
-            dx: BULLET_SPEED * Math.cos(ship.angle - angleOffset) + ship.dx * 0.5,
-            dy: BULLET_SPEED * Math.sin(ship.angle - angleOffset) + ship.dy * 0.5,
-        });
-        bullets.push({
-            ...baseBullet,
-            dx: BULLET_SPEED * Math.cos(ship.angle + angleOffset) + ship.dx * 0.5,
-            dy: BULLET_SPEED * Math.sin(ship.angle + angleOffset) + ship.dy * 0.5,
-        });
-    }
 }
 
 function activateSmartBomb() {
-    if (smartBombs > 0 && !gameOver) {
+    if (smartBombs > 0 && !gameState.gameOver) {
         smartBombs--;
         playSound('smartBomb', 0.5);
         // Destroy all asteroids on screen
@@ -666,33 +670,33 @@ function createAsteroidVertices(radius) {
 function drawAsteroid(asteroid) {
     // Defensive rendering: validate all properties
     if (!asteroid || typeof asteroid.x !== 'number' || typeof asteroid.y !== 'number' || !Array.isArray(asteroid.vertices) || asteroid.vertices.length === 0) return;
-    ctx.strokeStyle = 'grey';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(asteroid.x + asteroid.vertices[0].x, asteroid.y + asteroid.vertices[0].y);
+    domElements.ctx.strokeStyle = 'grey';
+    domElements.ctx.lineWidth = 1.5;
+    domElements.ctx.beginPath();
+    domElements.ctx.moveTo(asteroid.x + asteroid.vertices[0].x, asteroid.y + asteroid.vertices[0].y);
     for (let i = 1; i < asteroid.vertices.length; i++) {
-        ctx.lineTo(asteroid.x + asteroid.vertices[i].x, asteroid.y + asteroid.vertices[i].y);
+        domElements.ctx.lineTo(asteroid.x + asteroid.vertices[i].x, asteroid.y + asteroid.vertices[i].y);
     }
-    ctx.closePath();
-    ctx.stroke();
+    domElements.ctx.closePath();
+    domElements.ctx.stroke();
     // Draw '@' symbol at center for accessibility/clarity
-    ctx.save();
-    ctx.font = 'bold 18px monospace';
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(asteroid.symbol || '@', asteroid.x, asteroid.y);
-    ctx.restore();
+    domElements.ctx.save();
+    domElements.ctx.font = 'bold 18px monospace';
+    domElements.ctx.fillStyle = 'white';
+    domElements.ctx.textAlign = 'center';
+    domElements.ctx.textBaseline = 'middle';
+    domElements.ctx.fillText(asteroid.symbol || '@', asteroid.x, asteroid.y);
+    domElements.ctx.restore();
 }
 
 function spawnAsteroidsForLevel() {
-    const numAsteroids = ASTEROID_NUM_START + level -1;
+    const numAsteroids = ASTEROID_NUM_START + gameState.level -1;
     for (let i = 0; i < numAsteroids; i++) {
         let x, y;
         do { // Ensure asteroids don't spawn on top of the ship
             x = Math.random() * CANVAS_WIDTH;
             y = Math.random() * CANVAS_HEIGHT;
-        } while (distBetweenPoints(ship.x, ship.y, x, y) < ASTEROID_SIZE_LARGE * 2 + ship.radius);
+        } while (distBetweenPointsSquared(ship.x, ship.y, x, y) < Math.pow(ASTEROID_SIZE_LARGE * 2 + ship.radius, 2));
 
         const angle = Math.random() * Math.PI * 2;
         const speed = ASTEROID_SPEED_MIN + Math.random() * (ASTEROID_SPEED_MAX - ASTEROID_SPEED_MIN);
@@ -761,15 +765,19 @@ function getAsteroidPoints(radius) {
 }
 
 // Powerups
+function createPowerupObject(x, y, typeKey, typeDetails) {
+    return {
+        x: x, y: y,
+        type: typeKey,
+        details: typeDetails
+    };
+}
+
 function trySpawnPowerup(x, y) {
     if (Math.random() < POWERUP_SPAWN_CHANCE) {
         const typeKeys = Object.keys(POWERUP_TYPES);
         const randomTypeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-        powerups.push({
-            x: x, y: y,
-            type: randomTypeKey,
-            details: POWERUP_TYPES[randomTypeKey]
-        });
+        powerups.push(createPowerupObject(x, y, randomTypeKey, POWERUP_TYPES[randomTypeKey]));
     }
 }
 
@@ -790,22 +798,26 @@ function resetActivePowerUps() {
 }
 
 // Collisions
-function checkCollisions() {
-    // Bullet-Asteroid
+function checkBulletAsteroidCollisions() {
     for (let i = bullets.length - 1; i >= 0; i--) {
         for (let j = asteroids.length - 1; j >= 0; j--) {
-            if (distBetweenPoints(bullets[i].x, bullets[i].y, asteroids[j].x, asteroids[j].y) < asteroids[j].radius) {
+            if (distBetweenPointsSquared(bullets[i].x, bullets[i].y, asteroids[j].x, asteroids[j].y) < Math.pow(asteroids[j].radius, 2)) {
                 bullets.splice(i, 1);
                 breakAsteroid(j);
                 break; // Bullet can only hit one asteroid
             }
         }
     }
+}
 
-    // Ship-Asteroid
+function checkShipAsteroidCollisions() {
     if (!ship.isInvincible) {
         for (let i = asteroids.length - 1; i >= 0; i--) {
-            if (distBetweenPoints(ship.x, ship.y, asteroids[i].x, asteroids[i].y) < ship.radius + asteroids[i].radius - 5 /* slight tolerance */) {
+            const tolerance = 5;
+            const effectiveRadius = ship.radius + asteroids[i].radius - tolerance;
+            // Ensure effectiveRadius is not negative before squaring
+            const safeEffectiveRadius = Math.max(0, effectiveRadius); 
+            if (distBetweenPointsSquared(ship.x, ship.y, asteroids[i].x, asteroids[i].y) < Math.pow(safeEffectiveRadius, 2)) {
                 if (activePowerUps.SHIELD.active) {
                     activePowerUps.SHIELD.active = false; // Shield absorbs hit
                     playSound('shieldHit');
@@ -819,10 +831,11 @@ function checkCollisions() {
             }
         }
     }
+}
 
-    // Ship-Powerup
+function checkShipPowerupCollisions() {
     for (let i = powerups.length - 1; i >= 0; i--) {
-        if (distBetweenPoints(ship.x, ship.y, powerups[i].x, powerups[i].y) < ship.radius + 15 /* powerup radius */) {
+        if (distBetweenPointsSquared(ship.x, ship.y, powerups[i].x, powerups[i].y) < Math.pow(ship.radius + POWERUP_COLLISION_RADIUS, 2) /* powerup radius */) {
             activatePowerUp(powerups[i].type);
             powerups.splice(i, 1);
             break;
@@ -830,11 +843,17 @@ function checkCollisions() {
     }
 }
 
+function checkCollisions() {
+    checkBulletAsteroidCollisions();
+    checkShipAsteroidCollisions();
+    checkShipPowerupCollisions();
+}
+
 function shipHit() {
     createExplosion(ship.x, ship.y, ship.radius * 2, 'red');
     playSound('explosionLarge');
-    lives--;
-    if (lives <= 0) {
+    gameState.lives--;
+    if (gameState.lives <= 0) {
         showGameOverScreen();
     } else {
         ship = newShip(); // Reset ship with invincibility
@@ -843,45 +862,49 @@ function shipHit() {
 }
 
 // Particles
+function createParticle(x, y, baseRadius, colorString) {
+    const baseColor = hexToRgb(colorString) || {r:255, g:255, b:255};
+    return {
+        x: x, y: y,
+        dx: (Math.random() - 0.5) * (baseRadius / PARTICLE_SPEED_MULTIPLIER + PARTICLE_BASE_SPEED_ADDON),
+        dy: (Math.random() - 0.5) * (baseRadius / PARTICLE_SPEED_MULTIPLIER + PARTICLE_BASE_SPEED_ADDON),
+        radius: Math.random() * (baseRadius / PARTICLE_RANDOM_RADIUS_FACTOR_FROM_BASE + PARTICLE_RANDOM_RADIUS_ADDON) + PARTICLE_MINIMUM_FIXED_RADIUS,
+        alpha: 1,
+        color: {
+            r: Math.min(255, baseColor.r + Math.floor(Math.random() * PARTICLE_COLOR_VARIANCE - PARTICLE_COLOR_OFFSET)),
+            g: Math.min(255, baseColor.g + Math.floor(Math.random() * PARTICLE_COLOR_VARIANCE - PARTICLE_COLOR_OFFSET)),
+            b: Math.min(255, baseColor.b + Math.floor(Math.random() * PARTICLE_COLOR_VARIANCE - PARTICLE_COLOR_OFFSET))
+        }
+    };
+}
+
 function createExplosion(x, y, baseRadius, colorString) {
     const numParticles = Math.floor(baseRadius / 2) + 10;
-    const baseColor = hexToRgb(colorString) || {r:255, g:255, b:255}; // Default white
     for (let i = 0; i < numParticles; i++) {
-        particles.push({
-            x: x, y: y,
-            dx: (Math.random() - 0.5) * (baseRadius / 5 + 3),
-            dy: (Math.random() - 0.5) * (baseRadius / 5 + 3),
-            radius: Math.random() * (baseRadius / 10 + 1) + 1,
-            alpha: 1,
-            color: {
-                r: Math.min(255, baseColor.r + Math.floor(Math.random() * 50 - 25)),
-                g: Math.min(255, baseColor.g + Math.floor(Math.random() * 50 - 25)),
-                b: Math.min(255, baseColor.b + Math.floor(Math.random() * 50 - 25))
-            }
-        });
+        particles.push(createParticle(x, y, baseRadius, colorString));
     }
 }
 
 // Game Logic
 function checkLevelCompletion() {
-    if (asteroids.length === 0 && !gameOver) {
-        level++;
+    if (asteroids.length === 0 && !gameState.gameOver) {
+        gameState.level++;
         spawnAsteroidsForLevel();
         // Maybe give bonus points or a smart bomb for clearing level
     }
 }
 
 function addScore(points) {
-    score += points;
+    gameState.score += points;
     updateHUD();
 }
 
 // HUD
 function updateHUD() {
-    scoreDisplay.textContent = `Score: ${score}`;
-    livesDisplay.textContent = `Lives: ${'❤️'.repeat(lives)}`;
-    bombsDisplay.textContent = `Bombs: ${'💣'.repeat(smartBombs)}`;
-    highScoreDisplay.textContent = `High Score: ${highScore}`;
+    domElements.scoreDisplay.textContent = `Score: ${gameState.score}`;
+    domElements.livesDisplay.textContent = `Lives: ${'❤️'.repeat(gameState.lives)}`;
+    domElements.bombsDisplay.textContent = `Bombs: ${'💣'.repeat(smartBombs)}`;
+    domElements.highScoreDisplay.textContent = `High Score: ${gameState.highScore}`;
 
     let activePUText = "PowerUps: ";
     let hasActive = false;
@@ -897,17 +920,17 @@ function updateHUD() {
 
 // Input Handling
 function keyDownHandler(e) {
-    if (gameOver && e.key !== 'Enter' && e.key !== ' ') return; // Only allow restart on game over
-    if (gameOver && (e.key === 'Enter' || e.key === ' ')) {
-        if (!startScreen.classList.contains('hidden')) startGame(); // From start screen
-        else if (!gameOverScreen.classList.contains('hidden')) startGame(); // From game over screen
+    if (gameState.gameOver && e.key !== 'Enter' && e.key !== ' ') return; // Only allow restart on game over
+    if (gameState.gameOver && (e.key === 'Enter' || e.key === ' ')) {
+        if (!domElements.startScreen.classList.contains('hidden')) startGame(); // From start screen
+        else if (!domElements.gameOverScreen.classList.contains('hidden')) startGame(); // From game over screen
         return;
     }
 
     keys[e.key.toLowerCase()] = true;
 
     if (e.key.toLowerCase() === 'p') {
-        isPaused = !isPaused;
+        gameState.isPaused = !gameState.isPaused;
     }
     if (e.key.toLowerCase() === 'b') {
         activateSmartBomb();
@@ -918,7 +941,7 @@ function keyUpHandler(e) {
     keys[e.key.toLowerCase()] = false;
 }
 
-function handleInput(dt) {
+function handleInput() {
     ship.rotation = 0;
     ship.isThrusting = false;
 
@@ -944,8 +967,28 @@ function wrapScreen(obj) {
     if (obj.y > CANVAS_HEIGHT + obj.radius) obj.y = -obj.radius;
 }
 
-function distBetweenPoints(x1, y1, x2, y2) {
-    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+function distBetweenPointsSquared(x1, y1, x2, y2) {
+    return Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2);
+}
+
+function createOverlayDiv(text, options = {}) {
+    let div = document.createElement('div');
+    div.style.position = options.position || 'fixed';
+    div.style.background = options.background || 'red';
+    div.style.color = options.color || 'white';
+    div.style.fontSize = options.fontSize || '1.2em';
+    div.style.zIndex = options.zIndex || '9999';
+    div.style.padding = options.padding || '10px';
+    div.style.textAlign = options.textAlign || 'center';
+    if (options.top) div.style.top = options.top;
+    if (options.left) div.style.left = options.left;
+    if (options.bottom) div.style.bottom = options.bottom;
+    if (options.width) div.style.width = options.width;
+    if (options.margin) div.style.margin = options.margin;
+    if (options.pointerEvents) div.style.pointerEvents = options.pointerEvents;
+    div.textContent = text;
+    document.body.appendChild(div);
+    return div;
 }
 
 function hexToRgb(hex) {
