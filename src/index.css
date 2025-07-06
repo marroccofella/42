@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Fix text-size-adjust compatibility */
+  html,
+  :host {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-[#191533] text-white font-sans;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    background: radial-gradient(circle at 80% 20%, rgba(113, 95, 245, 0.2), transparent 40%);
+    z-index: -1;
+  }
+
+  body::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    background: radial-gradient(circle at 20% 80%, rgba(113, 95, 245, 0.15), transparent 40%);
+    z-index: -1;
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+@layer components {
+  /* Custom scrollbar for dark theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(113, 95, 245, 0.5);
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(113, 95, 245, 0.7);
+  }
+
+  /* Glassmorphism effect for panels */
+  .glass-panel {
+    /* Softer glass look with deeper blur and subtle shadow */
+    @apply bg-white/5 backdrop-blur-lg border border-white/10 rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.3)] transition-colors duration-300;
+  }
+  .glass-panel:hover {
+    @apply border-white/20;
+  }
+
+  /* Custom button styles */
+  .btn {
+    @apply px-4 py-2 rounded-md font-semibold shadow-sm transition-all duration-200 active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-promptus-base;
+  }
+  .btn-primary {
+    @apply bg-promptus-accent text-white hover:bg-promptus-accent-hover focus:ring-promptus-accent shadow-promptus-accent/30;
+  }
+  .btn-secondary {
+    @apply bg-white/10 text-promptus-text-primary hover:bg-white/20 focus:ring-white/50 shadow-white/10;
+  }
+  .btn-ghost {
+    @apply bg-transparent text-promptus-text-secondary hover:bg-white/10 focus:ring-white/50;
+  }
+
+  /* Custom input styles */
+  .input-base {
+    @apply w-full bg-black/20 border border-white/10 rounded-md p-2 text-promptus-text-primary placeholder-promptus-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-promptus-accent;
+  }
+}
+
+@layer utilities {
+  /* Video element styles */
+  video {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+  }
+
+  /* Text overlay styles */
+  .text-overlay {
+    left: calc(var(--x, 50) * 1%);
+    top: calc(var(--y, 50) * 1%);
+    transform: translate(-50%, -50%);
+    font-size: calc(var(--font-size, 24) * 1px);
+    color: var(--color, #FFFFFF);
+    background-color: var(--bg-color, rgba(0, 0, 0, 0.5));
+    padding: 8px 16px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+}

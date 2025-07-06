@@ -1,0 +1,5 @@
+{
+  "name": "Promptus Media Lab",
+  "description": "An AI-powered media editing studio. Upload a video, provide a creative prompt, and watch as Promptus populates your timeline with actionable editing cues.",
+  "requestFramePermissions": []
+}
