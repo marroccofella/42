@@ -38,6 +38,10 @@ export default function App(): React.ReactNode {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isApiKeySettingsOpen, setIsApiKeySettingsOpen] = useState(false);
   
+  // Timeline playback state
+  const [isTimelinePlayback, setIsTimelinePlayback] = useState(false);
+  const timelinePlaybackRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Auto-hide sidebar timer
   const sidebarTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -362,12 +366,13 @@ export default function App(): React.ReactNode {
     }
   };
 
-  const handleTimeUpdate = (localTime: number) => {
-    if (activeVideoClip) {
-        setCurrentTime(localTime + activeVideoClip.start);
+  const handleTimeUpdate = useCallback((localTime: number) => {
+    // Only update time from media elements if not in timeline playback mode
+    if (!isTimelinePlayback && activeVideoClip) {
+      setCurrentTime(localTime + activeVideoClip.start);
     }
-  };
-  
+  }, [isTimelinePlayback, activeVideoClip]);
+
   const handleSeek = useCallback((time: number) => {
     const newTime = Math.max(0, Math.min(time, totalDuration));
     if (newTime !== currentTime) {
@@ -444,6 +449,67 @@ export default function App(): React.ReactNode {
     });
   }, []);
 
+  // Full movie playback functionality
+  const handlePlayFullMovie = useCallback(() => {
+    if (totalDuration === 0) {
+      setError('No clips to play');
+      return;
+    }
+
+    if (isPlaying) {
+      // Stop timeline playback
+      setIsPlaying(false);
+      setIsTimelinePlayback(false);
+      if (timelinePlaybackRef.current) {
+        clearInterval(timelinePlaybackRef.current);
+        timelinePlaybackRef.current = null;
+      }
+      // Pause all media
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+      audioRefs.current.forEach(audio => {
+        audio.pause();
+      });
+    } else {
+      // Start timeline playback from beginning
+      console.log('🎬 Starting full movie playback - Duration:', totalDuration + 's');
+      setCurrentTime(0);
+      setIsPlaying(true);
+      setIsTimelinePlayback(true);
+      
+      // Create timeline playback interval
+      const startTime = Date.now();
+      timelinePlaybackRef.current = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        
+        if (elapsed >= totalDuration) {
+          // Playback complete
+          console.log('🎬 Full movie playback complete');
+          setIsPlaying(false);
+          setIsTimelinePlayback(false);
+          setCurrentTime(totalDuration);
+          if (timelinePlaybackRef.current) {
+            clearInterval(timelinePlaybackRef.current);
+            timelinePlaybackRef.current = null;
+          }
+        } else {
+          // Update timeline position
+          setCurrentTime(elapsed);
+        }
+      }, 100); // Update every 100ms for smooth playback
+    }
+  }, [totalDuration, isPlaying]);
+
+  // Cleanup timeline playback on unmount
+  useEffect(() => {
+    return () => {
+      if (timelinePlaybackRef.current) {
+        clearInterval(timelinePlaybackRef.current);
+      }
+    };
+  }, []);
+
   const allClips: Clip[] = tracks.flatMap<Clip>(t => t.clips);
   const allMediaClips: MediaClip[] = (tracks.filter((t): t is VideoTrack | AudioTrack => t.type === 'video' || t.type === 'audio')).flatMap<MediaClip>(t => t.clips);
 
@@ -492,10 +558,12 @@ export default function App(): React.ReactNode {
                 onAddTrack={handleAddTrack}
                 onRemoveTrack={handleRemoveTrack}
                 onMoveClip={handleMoveClip}
+                onPlayFullMovie={handlePlayFullMovie}
+                isPlaying={isPlaying}
               />
             </div>
             <div className="flex flex-col gap-6 lg:w-[384px] lg:flex-shrink-0">
-              <MediaPool onFilesChange={handleFilesChange} tracks={tracks} />
+              <MediaPool onFilesChange={handleFilesChange} tracks={tracks} scriptCues={cues} />
               <AIPanel 
                 onGenerate={handleGenerateCues} 
                 isLoading={isLoadingAI} 
