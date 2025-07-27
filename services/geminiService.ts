@@ -4,7 +4,6 @@ import type { ScriptCue } from '../types';
 
 // Default API key from environment
 const defaultApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-const fallbackApiKey = import.meta.env.VITE_DEFAULT_GEMINI_API_KEY;
 
 // Get the API key to use (user provided or default)
 function getApiKey(): string {
@@ -14,13 +13,12 @@ function getApiKey(): string {
         return userApiKey.trim();
     }
     
-    // Use environment variable or fallback
-    const envKey = defaultApiKey || fallbackApiKey;
-    if (!envKey) {
+    // Use environment variable
+    if (!defaultApiKey) {
         throw new Error("No Gemini API key available. Please set VITE_GEMINI_API_KEY or provide your own key.");
     }
     
-    return envKey;
+    return defaultApiKey;
 }
 
 // Validate API key format
@@ -74,7 +72,7 @@ export function setUserApiKey(apiKey: string): void {
 }
 
 // Get current API key info
-export function getApiKeyInfo(): { source: 'user' | 'default' | 'env'; key: string } {
+export function getApiKeyInfo(): { source: 'user' | 'env'; key: string } {
     const userKey = localStorage.getItem('gemini_api_key');
     if (userKey && userKey.trim()) {
         return { source: 'user', key: userKey.trim() };
@@ -82,10 +80,6 @@ export function getApiKeyInfo(): { source: 'user' | 'default' | 'env'; key: stri
     
     if (defaultApiKey) {
         return { source: 'env', key: defaultApiKey };
-    }
-    
-    if (fallbackApiKey) {
-        return { source: 'default', key: fallbackApiKey };
     }
     
     throw new Error('No API key available');

@@ -31,7 +31,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   };
 
   const handleReset = () => {
-    const defaultKey = 'AIzaSyDn7Xa2yLlJPmA585Po1-K9tqXHSS9HlG0';
+    const defaultKey = ''; // No default key
     setApiKey(defaultKey);
     onApiKeyChange(defaultKey);
   };
